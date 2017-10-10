@@ -10,4 +10,23 @@
 
 @interface THSigningImageView : UIImageView
 
+@property (nonatomic, strong) UIColor *foregroundLineColor;
+@property (nonatomic, strong) UIColor *backgroundLineColor;
+
+@property (nonatomic, assign) CGFloat foregroundLineWidth;
+@property (nonatomic, assign) CGFloat backgroundLineWidth;
+
+@property (nonatomic, strong) UILongPressGestureRecognizer *recognizer;
+
+- (void)setLineColor:(UIColor *)color;
+- (void)setLineWidth:(CGFloat)width;
+
+- (void)clear;
+- (void)clearWithColor:(UIColor *)color;
+
+- (UIImage *)signatureImage;
+- (NSData *)signatureData;
+
+- (BOOL)isSigned;
+
 @end
