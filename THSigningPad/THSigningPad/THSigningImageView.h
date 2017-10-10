@@ -3,7 +3,7 @@
 //  THSigningPad
 //
 //  Created by diamond on 09.10.17.
-//  Copyright © 2017 it-service herbst. All rights reserved.
+//  Copyright © 2017 it-service. All rights reserved.
 //
 
 #import <UIKit/UIKit.h>
@@ -26,7 +26,7 @@
 
 - (UIImage *)signatureImage;
 - (NSData *)signatureData;
-- (UIImage *)imageFromBase64String:(NSString *)base64String;
+- (NSString*)base64StringFromImage:(UIImage*) image;
 
 - (BOOL)isSigned;
 
