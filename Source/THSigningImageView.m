@@ -2,15 +2,15 @@
 //  THSigningImageView.m
 //  THSigningPad
 //
-//  Created by diamond on 10.10.17.
-//  Copyright © 2017 <it-service herbst> herbst.thorsten@gmail.com. All rights reserved.
+//  Created by diamond on 09.10.17.
+//  Copyright © 2017 it-service herbst. All rights reserved.
 //
 
 #import "THSigningImageView.h"
 
 static BOOL _isSigned = NO;
 static NSString* _b64String;
-static void *observerImageContext = &observerImageContext;
+
 
 @interface THSigningImageView ()
 @property (nonatomic, strong) NSMutableArray *drawnPoints;
@@ -45,7 +45,6 @@ static void *observerImageContext = &observerImageContext;
 
 
 - (void)_initialize {
-  [self registerAsObserverForImage];
   self.userInteractionEnabled = YES;
   
   self.svgPath = [[NSMutableString alloc] init];
@@ -80,29 +79,10 @@ static void *observerImageContext = &observerImageContext;
 }
 
 
--(void)registerAsObserverForImage{
-  [self addObserver:self forKeyPath:@"image"
-            options:(NSKeyValueObservingOptionNew,NSKeyValueObservingOptionOld) context:observerImageContext];
-}
-
-
--(void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context{
-  if (context == observerImageContext) {
-    NSLog(@" observeValueForKeyPath _isSigned ----> : %d, : %@",_isSigned,self.image);
-    
-    
-  } else {
-    // Any unrecognized context must belong to super
-    [super observeValueForKeyPath:keyPath
-                         ofObject:object
-                           change:change
-                          context:context];
-  }
-}
 - (void)clear {
   [self clearWithColor:[UIColor whiteColor]];
   [self clearWithColor:[UIColor clearColor]];
-  [self setNeedsDisplay];
+
 }
 
 - (void)clearWithColor:(UIColor *)color {
