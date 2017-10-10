@@ -1,21 +1,23 @@
 
-[![In-Mail](https://img.shields.io/badge/InMail-ThorstenHerbst-brightgreen.svg?style=flat-square)](Thorsten Herbst)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](MIT)
+[![In-Mail](https://img.shields.io/badge/InMail-ThorstenHerbst-brightgreen.svg?style=flat-square)](mailto:herbst.thorsten@gmail.com)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://github.com/michalkonturek/SignatureView/blob/master/LICENSE)
+
+
 
 
 # THSigningPad
 
 A simple signing pad for iOS.
 
-# Added Base64 Support AND fix errors which prevent the proper functionality in NativeScript.
+## Added Base64 Support and fix errors which prevent the proper functionality in NativeScript.
 
 
-Forked from the original signingView by:https://github.com/michalkonturek/signingView
+Forked from the original signingView by:https://github.com/michalkonturek/SignatureView
 ## License
 
 Source code of this project is available under the standard MIT license. Please see [the license file][LICENSE].
 
-[LICENSE]:https://github.com/diamond2010/THSigningPad/blob/master/LICENSE
+[LICENSE]:https://github.com/michalkonturek/SignatureView/blob/master/LICENSE
 
 ## Usage
 
@@ -60,7 +62,8 @@ NSData *signatureData = [self.signingView signatureData];
 or by Base64 representation:
 
 ```objc
-NSString *base64String = [self.signingView signatureData];
+UIImage* img = [self.signingView signatureImage];
+NSString *base64String = [self.signingView base64StringFromImage:img];
 ```
 
 ### Clearing
