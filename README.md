@@ -1,3 +1,4 @@
 # THSigningPad
-A simple signing pad for iOS
-forked from the original signatureview by:https://github.com/michalkonturek/SignatureView
+A simple signing pad for iOS.
+
+Forked from the original signatureview by:https://github.com/michalkonturek/SignatureView
