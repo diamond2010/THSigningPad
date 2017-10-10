@@ -1,0 +1,437 @@
+//
+//  THSigningImageView.m
+//  THSigningPad
+//
+//  Created by diamond on 10.10.17.
+//  Copyright © 2017 <it-service herbst> herbst.thorsten@gmail.com. All rights reserved.
+//
+
+#import "THSigningImageView.h"
+
+static BOOL _isSigned = NO;
+static NSString* _b64String;
+static void *observerImageContext = &observerImageContext;
+
+@interface THSigningImageView ()
+@property (nonatomic, strong) NSMutableArray *drawnPoints;
+@property (nonatomic, assign) CGPoint previousPoint;
+@property (nonatomic, strong) UIImage *tempImage;
+@property (nonatomic, strong) UIImage *sigImage;
+@property (nonatomic, strong) NSString *base64String;
+@property (nonatomic, strong) NSData *imageData;
+
+@property (nonatomic, retain) NSMutableString *svgPath;
+
+
+@end
+
+@implementation THSigningImageView
+
+- (id)initWithCoder:(NSCoder *)aDecoder {
+  self = [super initWithCoder:aDecoder];
+  if (self) {
+    [self _initialize];
+  }
+  return self;
+}
+
+- (id)initWithFrame:(CGRect)frame {
+  self = [super initWithFrame:frame];
+  if (self) {
+    [self _initialize];
+  }
+  return self;
+}
+
+
+- (void)_initialize {
+  [self registerAsObserverForImage];
+  self.userInteractionEnabled = YES;
+  
+  self.svgPath = [[NSMutableString alloc] init];
+  
+  [self _setupDefaultValues];
+  [self _initializeRecognizer];
+}
+
+- (void)_setupDefaultValues {
+  self.foregroundLineColor = [UIColor redColor];
+  self.foregroundLineWidth = 3.0;
+  
+  self.backgroundLineColor = [UIColor blackColor];
+  self.backgroundLineWidth = 3.0;
+}
+
+- (void)_initializeRecognizer {
+  id recognizer = [[UILongPressGestureRecognizer alloc] initWithTarget:self
+                                                                action:@selector(clear)];
+  self.recognizer = recognizer;
+  [self addGestureRecognizer:recognizer];
+}
+
+- (void)setLineColor:(UIColor *)color {
+  self.foregroundLineColor = color;
+  self.backgroundLineColor = color;
+}
+
+- (void)setLineWidth:(CGFloat)width {
+  self.backgroundLineWidth = width;
+  self.foregroundLineWidth = width;
+}
+
+
+-(void)registerAsObserverForImage{
+  [self addObserver:self forKeyPath:@"image"
+            options:(NSKeyValueObservingOptionNew,NSKeyValueObservingOptionOld) context:observerImageContext];
+}
+
+
+-(void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context{
+  if (context == observerImageContext) {
+    NSLog(@" observeValueForKeyPath _isSigned ----> : %d, : %@",_isSigned,self.image);
+    
+    
+  } else {
+    // Any unrecognized context must belong to super
+    [super observeValueForKeyPath:keyPath
+                         ofObject:object
+                           change:change
+                          context:context];
+  }
+}
+- (void)clear {
+  [self clearWithColor:[UIColor whiteColor]];
+  [self clearWithColor:[UIColor clearColor]];
+  [self setNeedsDisplay];
+}
+
+- (void)clearWithColor:(UIColor *)color {
+  
+  [self.svgPath setString:@""];
+  
+  CGSize screenSize = self.frame.size;
+  
+  UIGraphicsBeginImageContext(screenSize);
+  
+  CGContextRef context = UIGraphicsGetCurrentContext();
+  [self.image drawInRect:CGRectMake(0, 0, screenSize.width, screenSize.height)];
+  
+  CGContextSetFillColorWithColor(context, color.CGColor);
+  CGContextFillRect(context, CGRectMake(0, 0, screenSize.width, screenSize.height));
+  
+  UIImage *cleanImage = UIGraphicsGetImageFromCurrentImageContext();
+  self.image = cleanImage;
+  
+  UIGraphicsEndImageContext();
+}
+
+- (BOOL)isSigned {
+  return _isSigned == YES;
+  
+}
+
+
+- (UIImage *)signatureImage {
+  UIImage* img = [self imageFromBase64String:_b64String];
+  _b64String = nil;
+  return img;
+}
+
+- (NSData *)signatureData {
+  return UIImagePNGRepresentation(self.image);
+}
+
+- (NSString *)signatureSvg {
+  const unsigned width = (unsigned)self.bounds.size.width;
+  const unsigned height = (unsigned)self.bounds.size.height;
+  const unsigned strokeWidth = (unsigned)self.backgroundLineWidth;
+  
+  const CGColorSpaceModel colorSpace = CGColorSpaceGetModel(CGColorGetColorSpace(self.backgroundLineColor.CGColor));
+  const CGFloat *colorComponents = CGColorGetComponents(self.backgroundLineColor.CGColor);
+  int r = 0;
+  int g = 0;
+  int b = 0;
+  
+  if (colorSpace == kCGColorSpaceModelMonochrome) {
+    r = (int)(colorComponents[0] * 255);
+    g = (int)(colorComponents[0] * 255);
+    b = (int)(colorComponents[0] * 255);
+  }
+  else if (colorSpace == kCGColorSpaceModelRGB) {
+    r = (int)(colorComponents[0] * 255);
+    g = (int)(colorComponents[1] * 255);
+    b = (int)(colorComponents[2] * 255);
+  }
+  
+  NSString* svgAsString = [NSString stringWithFormat:@"<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"no\"?>\n"
+                           @"<svg  xmlns=\"http://www.w3.org/2000/svg\" viewport-fill=\"none\" viewBox=\"0, 0, %u, %u\" version=\"1.1\" height=\"%u\" width=\"%u\" >\n"
+                           @" <path fill=\"none\" stroke=\"#%02X%02X%02X\" stroke-width=\"%u\" d=\"%@\" />\n"
+                           @"</svg>",
+                           width,
+                           height,
+                           height,
+                           width,
+                           r, g, b,
+                           strokeWidth,
+                           [self.svgPath stringByTrimmingCharactersInSet: NSCharacterSet.whitespaceCharacterSet]
+                           ];
+  return svgAsString;
+}
+
+
+#pragma mark - Touch handlers
+
+- (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
+  
+  NSLog(@" touchesBegan _isSigned ----> : %d, %@",_isSigned,self.image);
+  
+  CGPoint currentPoint = [self _touchPointForTouches:touches];
+  self.drawnPoints = [NSMutableArray arrayWithObject:[NSValue valueWithCGPoint:currentPoint]];
+  self.previousPoint = currentPoint;
+  
+  /*
+   To be able to replace the jagged polylines with the smooth
+   polylines, we need to save the unmodified image.
+   */
+  self.tempImage = self.image;
+}
+
+- (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
+  
+  CGPoint currentPoint = [self _touchPointForTouches:touches];
+  [self.drawnPoints addObject:[NSValue valueWithCGPoint:currentPoint]];
+  
+  self.image = [self _drawLineFromPoint:self.previousPoint toPoint:currentPoint image:self.image];
+  self.previousPoint = currentPoint;
+  
+}
+
+- (CGPoint)_touchPointForTouches:(NSSet *)touches {
+  UITouch *touch = [touches anyObject];
+  CGPoint point = [touch locationInView:self];
+  return point;
+}
+
+- (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
+  
+  
+  
+  
+  NSArray *generalizedPoints = [self _douglasPeucker:self.drawnPoints epsilon:2];
+  NSArray *splinePoints = [self _catmullRomSpline:generalizedPoints segments:4];
+  self.image = [self _drawLineWithPoints:splinePoints image:self.tempImage];
+  self.imageData = UIImagePNGRepresentation(self.image);
+  self.base64String = [self base64StringFromImage:self.image];
+  _isSigned = YES;
+  
+  self.drawnPoints = nil;
+  self.tempImage = nil;
+}
+
+-(NSString*)base64StringFromImage:(UIImage*) image {
+  _b64String = [self.imageData base64EncodedStringWithOptions:kNilOptions];
+  return _b64String;
+}
+
+-(UIImage *)imageFromBase64String:(NSString *)base64String {
+  NSData *data = [[NSData alloc]initWithBase64EncodedString:base64String
+                                                    options:NSDataBase64DecodingIgnoreUnknownCharacters];
+  return [UIImage imageWithData:data];
+}
+
+- (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event {
+  
+}
+
+#pragma mark - Drawing
+
+- (UIImage *)_drawLineFromPoint:(CGPoint)fromPoint
+                        toPoint:(CGPoint)toPoint image:(UIImage *)image {
+  
+  CGSize screenSize = self.frame.size;
+  if (UIGraphicsBeginImageContextWithOptions != NULL) {
+    UIGraphicsBeginImageContextWithOptions(screenSize, NO, 0.0);
+  } else {
+    UIGraphicsBeginImageContext(screenSize);
+  }
+  CGContextRef context = UIGraphicsGetCurrentContext();
+  
+  [image drawInRect:CGRectMake(0, 0, screenSize.width, screenSize.height)];
+  
+  CGContextSetLineCap(context, kCGLineCapRound);
+  CGContextSetLineWidth(context, self.foregroundLineWidth);
+  CGContextSetStrokeColorWithColor(context, self.foregroundLineColor.CGColor);
+  
+  CGContextBeginPath(context);
+  
+  CGContextMoveToPoint(context, fromPoint.x, fromPoint.y);
+  CGContextAddLineToPoint(context, toPoint.x, toPoint.y);
+  CGContextStrokePath(context);
+  
+  UIImage *result = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+  
+  return result;
+}
+
+- (UIImage *)_drawLineWithPoints:(NSArray *)points image:(UIImage *)image {
+  
+  CGSize screenSize = self.frame.size;
+  
+  if (UIGraphicsBeginImageContextWithOptions != NULL) {
+    UIGraphicsBeginImageContextWithOptions(screenSize, NO, 0.0);
+  } else {
+    UIGraphicsBeginImageContext(screenSize);
+  }
+  CGContextRef context = UIGraphicsGetCurrentContext();
+  
+  [image drawInRect:CGRectMake(0, 0, screenSize.width, screenSize.height)];
+  
+  CGContextSetLineCap(context, kCGLineCapRound);
+  CGContextSetLineWidth(context, self.backgroundLineWidth);
+  CGContextSetStrokeColorWithColor(context, self.backgroundLineColor.CGColor);
+  
+  CGContextBeginPath(context);
+  
+  NSInteger count = [points count];
+  CGPoint point = [[points objectAtIndex:0] CGPointValue];
+  CGContextMoveToPoint(context, point.x, point.y);
+  [self.svgPath appendFormat:@" M%.1lf %.1lf", point.x, point.y];
+  for(int i = 1; i < count; i++) {
+    point = [[points objectAtIndex:i] CGPointValue];
+    CGContextAddLineToPoint(context, point.x, point.y);
+    [self.svgPath appendFormat:@" L%.1lf %.1lf", point.x, point.y];
+  }
+  CGContextStrokePath(context);
+  
+  UIImage *result = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+  
+  
+  return result;
+}
+
+
+#pragma mark - Smoothing Alrgorithms
+
+- (NSArray *)_douglasPeucker:(NSArray *)points epsilon:(float)epsilon {
+  
+  NSInteger count = [points count];
+  if(count < 3) return points;
+  
+  //Find the point with the maximum distance
+  float dmax = 0;
+  int index = 0;
+  for(int i = 1; i < count - 1; i++) {
+    CGPoint point = [[points objectAtIndex:i] CGPointValue];
+    CGPoint lineA = [[points objectAtIndex:0] CGPointValue];
+    CGPoint lineB = [[points objectAtIndex:count - 1] CGPointValue];
+    float d = [self _perpendicularDistance:point lineA:lineA lineB:lineB];
+    if(d > dmax) {
+      index = i;
+      dmax = d;
+    }
+  }
+  
+  // If max distance is greater than epsilon, recursively simplify
+  NSArray *resultList;
+  if(dmax > epsilon) {
+    NSArray *recResults1 = [self _douglasPeucker:[points subarrayWithRange:NSMakeRange(0, index + 1)]
+                                         epsilon:epsilon];
+    
+    NSArray *recResults2 = [self _douglasPeucker:[points subarrayWithRange:NSMakeRange(index, count - index)]
+                                         epsilon:epsilon];
+    
+    NSMutableArray *tmpList = [NSMutableArray arrayWithArray:recResults1];
+    [tmpList removeLastObject];
+    [tmpList addObjectsFromArray:recResults2];
+    resultList = tmpList;
+  } else {
+    resultList = [NSArray arrayWithObjects:[points objectAtIndex:0], [points objectAtIndex:count - 1],nil];
+  }
+  
+  return resultList;
+}
+
+- (float)_perpendicularDistance:(CGPoint)point
+                          lineA:(CGPoint)lineA lineB:(CGPoint)lineB {
+  
+  CGPoint v1 = CGPointMake(lineB.x - lineA.x, lineB.y - lineA.y);
+  CGPoint v2 = CGPointMake(point.x - lineA.x, point.y - lineA.y);
+  
+  float lenV1 = sqrt(v1.x * v1.x + v1.y * v1.y);
+  float lenV2 = sqrt(v2.x * v2.x + v2.y * v2.y);
+  float angle = acos((v1.x * v2.x + v1.y * v2.y) / (lenV1 * lenV2));
+  
+  return sin(angle) * lenV2;
+}
+
+- (NSArray *)_catmullRomSpline:(NSArray *)points segments:(int)segments {
+  
+  NSInteger count = [points count];
+  if(count < 4) return points;
+  
+  float b[segments][4];
+  {
+    // precompute interpolation parameters
+    float t = 0.0f;
+    float dt = 1.0f/(float)segments;
+    for (int i = 0; i < segments; i++, t+=dt) {
+      float tt = t*t;
+      float ttt = tt * t;
+      b[i][0] = 0.5f * (-ttt + 2.0f*tt - t);
+      b[i][1] = 0.5f * (3.0f*ttt -5.0f*tt +2.0f);
+      b[i][2] = 0.5f * (-3.0f*ttt + 4.0f*tt + t);
+      b[i][3] = 0.5f * (ttt - tt);
+    }
+  }
+  
+  NSMutableArray *resultArray = [NSMutableArray array];
+  
+  {
+    int i = 0; // first control point
+    [resultArray addObject:[points objectAtIndex:0]];
+    for (int j = 1; j < segments; j++) {
+      CGPoint pointI = [[points objectAtIndex:i] CGPointValue];
+      CGPoint pointIp1 = [[points objectAtIndex:(i + 1)] CGPointValue];
+      CGPoint pointIp2 = [[points objectAtIndex:(i + 2)] CGPointValue];
+      float px = (b[j][0]+b[j][1])*pointI.x + b[j][2]*pointIp1.x + b[j][3]*pointIp2.x;
+      float py = (b[j][0]+b[j][1])*pointI.y + b[j][2]*pointIp1.y + b[j][3]*pointIp2.y;
+      [resultArray addObject:[NSValue valueWithCGPoint:CGPointMake(px, py)]];
+    }
+  }
+  
+  for (int i = 1; i < count - 2; i++) {
+    // the first interpolated point is always the original control point
+    [resultArray addObject:[points objectAtIndex:i]];
+    for (int j = 1; j < segments; j++) {
+      CGPoint pointIm1 = [[points objectAtIndex:(i - 1)] CGPointValue];
+      CGPoint pointI = [[points objectAtIndex:i] CGPointValue];
+      CGPoint pointIp1 = [[points objectAtIndex:(i + 1)] CGPointValue];
+      CGPoint pointIp2 = [[points objectAtIndex:(i + 2)] CGPointValue];
+      float px = b[j][0]*pointIm1.x + b[j][1]*pointI.x + b[j][2]*pointIp1.x + b[j][3]*pointIp2.x;
+      float py = b[j][0]*pointIm1.y + b[j][1]*pointI.y + b[j][2]*pointIp1.y + b[j][3]*pointIp2.y;
+      [resultArray addObject:[NSValue valueWithCGPoint:CGPointMake(px, py)]];
+    }
+  }
+  
+  {
+    NSInteger i = count - 2; // second to last control point
+    [resultArray addObject:[points objectAtIndex:i]];
+    for (int j = 1; j < segments; j++) {
+      CGPoint pointIm1 = [[points objectAtIndex:(i - 1)] CGPointValue];
+      CGPoint pointI = [[points objectAtIndex:i] CGPointValue];
+      CGPoint pointIp1 = [[points objectAtIndex:(i + 1)] CGPointValue];
+      float px = b[j][0]*pointIm1.x + b[j][1]*pointI.x + (b[j][2]+b[j][3])*pointIp1.x;
+      float py = b[j][0]*pointIm1.y + b[j][1]*pointI.y + (b[j][2]+b[j][3])*pointIp1.y;
+      [resultArray addObject:[NSValue valueWithCGPoint:CGPointMake(px, py)]];
+    }
+  }
+  
+  // the very last interpolated point is the last control point
+  [resultArray addObject:[points objectAtIndex:(count - 1)]];
+  
+  return resultArray;
+}
+
+@end
